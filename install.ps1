@@ -248,6 +248,73 @@ function Remove-RegDefault {
     } catch { }
 }
 
+# Explorer keeps its own per-user shortlist for every extension, and the "Open
+# with" flyout on the context menu is built from that -- not from the class
+# registration under Software\Classes. An application can be a perfectly valid,
+# recommended handler and still never appear in the menu, which is exactly where
+# r9view sat: registered, enumerable through the shell API, and invisible.
+#
+# UserChoice is deliberately left alone. That is the default handler, it belongs
+# to the user, and Windows guards it with a hash anyway. This only adds r9view to
+# the list of things offered.
+function Add-ToExplorerOpenWith {
+    param([string] $Extension, [string] $ProgId)
+
+    $base = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$Extension"
+
+    $progids = "$base\OpenWithProgids"
+    if (-not (Test-Path $progids)) { New-Item -Path $progids -Force | Out-Null }
+    Set-RegValue -Path $progids -Name $ProgId -Value ''
+
+    # The application list is lettered slots plus an MRU string. Putting r9view
+    # at the front of the MRU is what actually surfaces it in the flyout.
+    $list = "$base\OpenWithList"
+    if (-not (Test-Path $list)) { New-Item -Path $list -Force | Out-Null }
+
+    # A key with no values at all returns nothing here, not an empty object, so
+    # every read below has to cope with $null -- which a freshly created
+    # OpenWithList always is.
+    $props = Get-ItemProperty -Path $list -ErrorAction SilentlyContinue
+    $slots = @{}
+    $mru = ''
+    if ($props) {
+        foreach ($p in $props.PSObject.Properties) {
+            if ($p.Name -cmatch '^[a-z]$') { $slots[$p.Name] = [string] $p.Value }
+            if ($p.Name -eq 'MRUList')     { $mru = [string] $p.Value }
+        }
+    }
+
+    $letter = ''
+    foreach ($k in $slots.Keys) {
+        if ($slots[$k] -ieq 'r9view.exe') { $letter = $k; break }
+    }
+    if (-not $letter) {
+        foreach ($c in [char[]]'abcdefghijklmnopqrstuvwxyz') {
+            if (-not $slots.ContainsKey([string] $c)) { $letter = [string] $c; break }
+        }
+        if (-not $letter) { return }   # 26 applications already listed; leave it be
+        Set-RegValue -Path $list -Name $letter -Value 'r9view.exe'
+    }
+
+    Set-RegValue -Path $list -Name 'MRUList' -Value ($letter + ($mru -replace $letter, ''))
+}
+
+# A named verb on the right-click menu, which is the one route that does not
+# depend on the "Open with" flyout having room. That flyout is capped, and on a
+# machine that already has Paint, Snipping Tool, Photos and a couple of photo
+# viewers registered, a newly installed viewer simply falls off the end of it.
+#
+# SystemFileAssociations\image covers every file Windows perceives as an image,
+# whatever its extension, so this does not have to be repeated per format.
+function Add-ContextMenuVerb {
+    param([string] $Target, [string] $Exe)
+
+    $key = "HKCU:\Software\Classes\SystemFileAssociations\$Target\shell\r9view"
+    Set-RegValue -Path $key -Name 'MUIVerb' -Value 'Open with r9view'
+    Set-RegValue -Path $key -Name 'Icon' -Value "$Exe,0"
+    Set-RegValue -Path "$key\command" -Name '(default)' -Value ('"' + $Exe + '" "%1"')
+}
+
 function Register-FileTypes {
     param([string] $Exe)
 
@@ -286,6 +353,7 @@ function Register-FileTypes {
             if (-not (Test-Path "$classes\$ext\OpenWithList\r9view.exe")) {
                 New-Item -Path "$classes\$ext\OpenWithList\r9view.exe" -Force | Out-Null
             }
+            Add-ToExplorerOpenWith -Extension $ext -ProgId $progId
             # Take the extension itself only for comic formats, and only when it
             # is going spare. Windows will not let anyone but the user change a
             # default they have already chosen, and it should not: this fills a
@@ -313,6 +381,14 @@ function Register-FileTypes {
     }
     Set-RegValue -Path 'HKCU:\Software\RegisteredApplications' -Name 'r9view' -Value 'Software\r9view\Capabilities'
 
+    # "Open with r9view" on the menu itself: once for anything Windows calls an
+    # image, and once per archive extension, which has no perceived type to hang
+    # a single entry on.
+    Add-ContextMenuVerb -Target 'image' -Exe $Exe
+    foreach ($ext in $ComicExt + $ArchiveExt) {
+        Add-ContextMenuVerb -Target $ext -Exe $Exe
+    }
+
     Update-ShellAssociations
 }
 
@@ -323,8 +399,10 @@ function Update-ShellAssociations {
 public static extern void SHChangeNotify(int eventId, uint flags, System.IntPtr a, System.IntPtr b);
 '@
     }
-    # SHCNE_ASSOCCHANGED: tell Explorer to re-read what opens what.
-    [R9View.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    # SHCNE_ASSOCCHANGED with SHCNF_FLUSH: tell Explorer to re-read what opens
+    # what, and wait until it has, rather than returning while the menu is still
+    # showing the old list.
+    [R9View.Shell]::SHChangeNotify(0x08000000, 0x1000, [IntPtr]::Zero, [IntPtr]::Zero)
 }
 
 function Add-ToUserPath {
@@ -393,6 +471,33 @@ Get-ChildItem $classes | Where-Object { $_.PSChildName -like '.*' } | ForEach-Ob
         }
     }
 }
+Get-ChildItem 'HKCU:\Software\Classes\SystemFileAssociations' | ForEach-Object {
+    $verb = Join-Path $_.PSPath 'shell\r9view'
+    if (Test-Path $verb) { Remove-Item -Path $verb -Recurse -Force }
+}
+Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts' | ForEach-Object {
+    $owp = Join-Path $_.PSPath 'OpenWithProgids'
+    foreach ($progId in $progIds) {
+        if (Test-Path $owp) { Remove-ItemProperty -Path $owp -Name $progId -Force }
+    }
+    $list = Join-Path $_.PSPath 'OpenWithList'
+    if (Test-Path $list) {
+        $props = Get-ItemProperty -Path $list
+        if ($props) {
+            $mru = ''
+            foreach ($p in @($props.PSObject.Properties)) {
+                if ($p.Name -eq 'MRUList') { $mru = [string] $p.Value }
+            }
+            foreach ($p in @($props.PSObject.Properties)) {
+                if ($p.Name -cmatch '^[a-z]$' -and [string] $p.Value -ieq 'r9view.exe') {
+                    Remove-ItemProperty -Path $list -Name $p.Name -Force
+                    $mru = $mru -replace $p.Name, ''
+                    New-ItemProperty -Path $list -Name 'MRUList' -Value $mru -PropertyType String -Force | Out-Null
+                }
+            }
+        }
+    }
+}
 Remove-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'r9view' -Force
 Remove-Item 'HKCU:\Software\r9view' -Recurse -Force
 Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\r9view' -Recurse -Force
@@ -439,6 +544,37 @@ function Invoke-Uninstall {
                 # worse than one we never touched: the file becomes unopenable.
                 if ((Get-RegDefault -Path $_.PSPath) -eq $progId) {
                     Remove-RegDefault -Path $_.Name
+                }
+            }
+        }
+    Get-ChildItem 'HKCU:\Software\Classes\SystemFileAssociations' -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $verb = Join-Path $_.PSPath 'shell\r9view'
+            if (Test-Path $verb) { Remove-Item -Path $verb -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+
+    # Explorer's per-user shortlist, the other half of the registration.
+    Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts' -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $progids = Join-Path $_.PSPath 'OpenWithProgids'
+            foreach ($progId in $AllProgIds) {
+                if (Test-Path $progids) { Remove-ItemProperty -Path $progids -Name $progId -Force -ErrorAction SilentlyContinue }
+            }
+            $list = Join-Path $_.PSPath 'OpenWithList'
+            if (Test-Path $list) {
+                $props = Get-ItemProperty -Path $list -ErrorAction SilentlyContinue
+                if ($props) {
+                    $mru = ''
+                    foreach ($p in @($props.PSObject.Properties)) {
+                        if ($p.Name -eq 'MRUList') { $mru = [string] $p.Value }
+                    }
+                    foreach ($p in @($props.PSObject.Properties)) {
+                        if ($p.Name -cmatch '^[a-z]$' -and [string] $p.Value -ieq 'r9view.exe') {
+                            Remove-ItemProperty -Path $list -Name $p.Name -Force -ErrorAction SilentlyContinue
+                            $mru = $mru -replace $p.Name, ''
+                            Set-RegValue -Path $list -Name 'MRUList' -Value $mru
+                        }
+                    }
                 }
             }
         }
@@ -606,7 +742,8 @@ rm -f "`$log"
     Write-Host ''
     if (-not $NoShortcut) { Write-Note 'in the Start Menu as r9view' }
     if (-not $NoAssoc) {
-        Write-Note 'right-click a comic or an image -> Open with -> r9view'
+        Write-Note 'right-click an image or a comic -> "Open with r9view"'
+        Write-Note '  (on Windows 11 that sits under "Show more options")'
         Write-Note 'to make it the default for a type: Settings -> Apps -> Default apps -> r9view'
     }
     if ($pathAdded)       { Write-Warn 'open a new terminal before the r9view command works there' }

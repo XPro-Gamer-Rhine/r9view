@@ -36,9 +36,11 @@ irm https://raw.githubusercontent.com/XPro-Gamer-Rhine/r9view/main/install.ps1 |
 ```
 
 Same idea: it installs the toolchain, compiles, and puts r9view in your Start
-Menu with `r9view` on your PATH. No administrator rights are needed — everything
-lands under `%LOCALAPPDATA%\Programs\r9view`, and it appears in *Add or remove
-programs* like anything else.
+Menu with `r9view` on your PATH. No administrator rights are needed, because
+everything lands under your own profile — the executable itself is at
+`%LOCALAPPDATA%\Programs\r9view\r9view.exe`, in one self-contained folder with
+the libraries it loads. It appears in *Add or remove programs* like anything
+else.
 
 The toolchain is [MSYS2](https://www.msys2.org/), which the script installs if
 you do not already have it. The finished application does not depend on it: the

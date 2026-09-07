@@ -222,6 +222,29 @@
   .card h3 { margin: 0 0 7px; font-size: 1rem; }
   .card p { margin: 0; color: var(--dim); font-size: 0.92rem; }
 
+  /* --------------------------------------------------------------- paths --- */
+
+  .paths { display: grid; gap: 34px; grid-template-columns: 1fr 1fr; }
+  .paths h3 { margin: 0 0 4px; font-size: 1rem; }
+
+  .paths dl { margin: 0; }
+  .paths dt {
+    margin-top: 18px;
+    font-size: 0.78rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--accent2);
+  }
+  .paths dd {
+    margin: 5px 0 0;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    color: var(--text);
+  }
+  .paths dd span { display: block; color: var(--dim); font-family: var(--sans); font-size: 0.84rem; margin-top: 3px; }
+
   /* ------------------------------------------------------------ controls --- */
 
   .controls { display: grid; gap: 34px; grid-template-columns: 1fr 1fr; }
@@ -412,6 +435,61 @@
       <div class="card">
         <h3>File associations</h3>
         <p>r9view claims <code>.cbz</code> <code>.cbr</code> <code>.cb7</code> <code>.cbt</code> when nothing else has them, and adds itself to <em>Open with</em> for everything else it reads. It will not take <code>.zip</code> or <code>.jpg</code> away from whatever you already use.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="where">
+  <div class="wrap">
+    <h2>Where it goes</h2>
+    <p class="lede">
+      On Windows the application is one self-contained folder — the executable sits
+      with the libraries it loads, so you can copy it, back it up or delete it as a
+      unit. Nothing is written next to your comics.
+    </p>
+    <div class="paths">
+      <div>
+        <h3>Windows</h3>
+        <dl>
+          <dt>The application</dt>
+          <dd>%LOCALAPPDATA%\Programs\r9view\r9view.exe
+            <span>Under your own profile, which is why the installer never needs administrator rights. Also added to your PATH, so <code>r9view</code> works in a new terminal.</span>
+          </dd>
+          <dt>Start Menu entry</dt>
+          <dd>%APPDATA%\Microsoft\Windows\Start Menu\Programs\r9view.lnk</dd>
+          <dt>Settings and bookmarks</dt>
+          <dd>%APPDATA%\r9view\r9view.ini</dd>
+          <dt>Uninstaller</dt>
+          <dd>%LOCALAPPDATA%\Programs\r9view\uninstall.ps1
+            <span>Or use <em>Add or remove programs</em>. Settings are left behind on purpose; delete the folder above if you want none of it kept.</span>
+          </dd>
+          <dt>Somewhere else</dt>
+          <dd>.\install.ps1 -Prefix 'D:\Apps\r9view'
+            <span>A path under <code>Program Files</code> needs an elevated PowerShell, since a normal user cannot write there.</span>
+          </dd>
+        </dl>
+      </div>
+      <div>
+        <h3>Linux</h3>
+        <dl>
+          <dt>The binary</dt>
+          <dd>/usr/local/bin/r9view
+            <span>The default prefix, installed with <code>sudo</code>.</span>
+          </dd>
+          <dt>Just for you, no root</dt>
+          <dd>PREFIX=~/.local curl … | bash
+            <span>Puts it at <code>~/.local/bin/r9view</code>.</span>
+          </dd>
+          <dt>Desktop entry and icon</dt>
+          <dd>$PREFIX/share/applications/<br>$PREFIX/share/icons/hicolor/</dd>
+          <dt>Settings and bookmarks</dt>
+          <dd>~/.config/r9view/</dd>
+          <dt>Uninstall</dt>
+          <dd>rm $PREFIX/bin/r9view
+            <span>Plus the desktop entry and icon above.</span>
+          </dd>
+        </dl>
       </div>
     </div>
   </div>

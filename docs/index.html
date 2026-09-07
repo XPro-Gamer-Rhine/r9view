@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>r9view — a touch-first comic and image viewer</title>
+<meta name="description" content="Read comics straight out of a zip, cbz, cbr or 7z without unpacking. A touch-first image and comic viewer for Linux and Windows.">
+<link rel="icon" href="r9view.svg" type="image/svg+xml">
+<meta property="og:title" content="r9view">
+<meta property="og:description" content="Read comics straight out of a zip, without unpacking. Linux and Windows.">
+<meta property="og:image" content="shot-reader.png">
+<meta name="theme-color" content="#0b0b0f">
+<style>
+  /* The site borrows the application's own palette, from qml/Theme.qml. */
+  :root {
+    --bg: #0b0b0f;
+    --surface: #16161d;
+    --surface-high: #20202b;
+    --text: #e9e9f2;
+    --dim: #9b9bad;
+    --accent: #7c5cff;
+    --accent2: #2ad0c8;
+    --line: rgba(255, 255, 255, 0.09);
+    --radius: 12px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent2); }
+
+  .wrap { width: min(1040px, calc(100% - 48px)); margin-inline: auto; }
+
+  /* ---------------------------------------------------------------- hero --- */
+
+  .hero {
+    position: relative;
+    padding: 96px 0 72px;
+    text-align: center;
+    overflow: hidden;
+  }
+  /* A soft wash of the two brand colours behind the title, nothing more. */
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -40% 0 auto;
+    height: 620px;
+    background:
+      radial-gradient(closest-side, rgba(124, 92, 255, 0.20), transparent 70%) 30% 40% / 70% 100% no-repeat,
+      radial-gradient(closest-side, rgba(42, 208, 200, 0.16), transparent 70%) 72% 55% / 60% 90% no-repeat;
+    filter: blur(10px);
+    pointer-events: none;
+  }
+  .hero > * { position: relative; }
+
+  .logo { width: 96px; height: 96px; display: block; margin: 0 auto 22px; }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 3.8rem);
+    letter-spacing: -0.03em;
+    font-weight: 700;
+  }
+
+  .tagline {
+    margin: 14px auto 6px;
+    max-width: 30ch;
+    font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+    color: var(--text);
+  }
+
+  .sub {
+    margin: 0 auto 38px;
+    max-width: 56ch;
+    color: var(--dim);
+  }
+
+  /* ------------------------------------------------------------- install --- */
+
+  .install { max-width: 780px; margin-inline: auto; text-align: left; }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    justify-content: center;
+  }
+
+  .tab {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dim);
+    font: inherit;
+    font-size: 0.92rem;
+    padding: 7px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 160ms, color 160ms, border-color 160ms;
+  }
+  .tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .tab[aria-selected="true"] {
+    color: var(--text);
+    background: rgba(124, 92, 255, 0.20);
+    border-color: rgba(124, 92, 255, 0.55);
+  }
+
+  .cmd {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 14px 14px 18px;
+  }
+
+  /* The command wraps rather than scrolls: this is the one thing a visitor came
+     for, and half a command behind a scrollbar is no use to anyone. The copy
+     button hands over the unwrapped text either way. */
+  .cmd code {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    flex: 1;
+    color: var(--text);
+  }
+  .cmd code::before { content: "$ "; color: var(--accent2); }
+  .cmd[data-os="windows"] code::before { content: "> "; }
+
+  .copy {
+    flex: none;
+    align-self: center;
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--surface-high);
+    color: var(--dim);
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 160ms, border-color 160ms;
+  }
+  .copy:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.24); }
+  .copy.done { color: var(--accent2); border-color: rgba(42, 208, 200, 0.5); }
+
+  .note { margin: 12px 2px 0; font-size: 0.86rem; color: var(--dim); text-align: center; }
+
+  .links { margin-top: 30px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-block;
+    padding: 10px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    text-decoration: none;
+    color: var(--text);
+    font-size: 0.94rem;
+    transition: border-color 160ms, background 160ms;
+  }
+  .btn:hover { border-color: rgba(255, 255, 255, 0.26); background: rgba(255, 255, 255, 0.04); }
+
+  /* -------------------------------------------------------------- shared --- */
+
+  section { padding: 62px 0; border-top: 1px solid var(--line); }
+
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.55rem;
+    letter-spacing: -0.02em;
+  }
+
+  .lede { margin: 0 0 34px; color: var(--dim); max-width: 62ch; }
+
+  /* --------------------------------------------------------------- shots --- */
+
+  figure { margin: 0 0 26px; }
+
+  /* height:auto matters: the width/height attributes are there so the browser
+     reserves the right box before the image arrives, and without it those
+     attributes win and every screenshot renders stretched to 900px tall. */
+  figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  figcaption { margin-top: 10px; font-size: 0.86rem; color: var(--dim); }
+
+  .shots { display: grid; gap: 26px; grid-template-columns: 1fr 1fr; }
+  .shots figure:first-child { grid-column: 1 / -1; }
+
+  /* ------------------------------------------------------------ features --- */
+
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+  }
+  .card h3 { margin: 0 0 7px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--dim); font-size: 0.92rem; }
+
+  /* ------------------------------------------------------------ controls --- */
+
+  .controls { display: grid; gap: 34px; grid-template-columns: 1fr 1fr; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th { text-align: left; font-weight: 600; padding: 0 0 10px; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent2); }
+  td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td:first-child { width: 44%; padding-right: 16px; }
+  td:last-child { color: var(--dim); }
+
+  kbd {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--surface-high);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+
+  /* -------------------------------------------------------------- footer --- */
+
+  footer {
+    padding: 44px 0 60px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 0.88rem;
+  }
+  footer p { margin: 0 0 6px; }
+
+  @media (max-width: 720px) {
+    .shots, .controls { grid-template-columns: 1fr; }
+    .hero { padding-top: 64px; }
+    .cmd { flex-direction: column; align-items: stretch; gap: 10px; }
+    .copy { align-self: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="logo" src="r9view.svg" alt="">
+    <h1>r9view</h1>
+    <p class="tagline">Read comics straight out of a zip.</p>
+    <p class="sub">
+      Point it at a <code>.cbz</code>, <code>.zip</code>, <code>.cbr</code> or <code>.7z</code> and it
+      reads the images inside, in page order, without unpacking anything first.
+      It works just as well on an ordinary folder of pictures.
+    </p>
+
+    <div class="install">
+      <div class="tabs" role="tablist" aria-label="Choose your system">
+        <button class="tab" role="tab" id="tab-linux"   aria-controls="cmd" aria-selected="false">Linux</button>
+        <button class="tab" role="tab" id="tab-windows" aria-controls="cmd" aria-selected="false">Windows</button>
+      </div>
+
+      <div class="cmd" id="cmd" data-os="linux">
+        <code id="cmd-text">curl -fsSL https://raw.githubusercontent.com/XPro-Gamer-Rhine/r9view/main/install.sh | bash</code>
+        <button class="copy" id="copy" type="button">Copy</button>
+      </div>
+
+      <p class="note" id="note">
+        Installs the build dependencies, compiles, and puts <code>r9view</code> on your PATH
+        with a desktop entry.
+      </p>
+    </div>
+
+    <nav class="links">
+      <a class="btn" href="https://github.com/XPro-Gamer-Rhine/r9view">Source on GitHub</a>
+      <a class="btn" href="#controls">Controls</a>
+    </nav>
+  </div>
+</header>
+
+<section id="screens">
+  <div class="wrap">
+    <h2>What it looks like</h2>
+    <p class="lede">
+      Edge to edge, in its own palette, with the bars getting out of the way a few
+      seconds after you stop touching them.
+    </p>
+    <div class="shots">
+      <figure>
+        <img src="shot-reader.png" alt="A comic page filling the r9view window, with the title bar above and a page slider below." loading="lazy" width="1400" height="900">
+        <figcaption>The reader. Pages are decoded on background threads, with the neighbours prefetched so a swipe lands on a drawn page.</figcaption>
+      </figure>
+      <figure>
+        <img src="shot-grid.png" alt="A grid of page thumbnails with the current page outlined." loading="lazy" width="1400" height="900">
+        <figcaption>Every page at once — press <kbd>G</kbd>.</figcaption>
+      </figure>
+      <figure>
+        <img src="shot-welcome.png" alt="The r9view start screen with buttons to open an archive or a folder." loading="lazy" width="1400" height="900">
+        <figcaption>The start screen, listing what you read recently.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Details worth knowing</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Archives are never unpacked</h3>
+        <p>Pages are decoded straight out of the archive. The reader keeps its position in the stream and walks forward, which is what makes solid 7z and rar archives fast rather than quadratic.</p>
+      </div>
+      <div class="card">
+        <h3>Pages come out in the right order</h3>
+        <p>Natural sorting, so <code>2.webp</code> comes before <code>10.webp</code> — the thing plain alphabetical sorting gets wrong in almost every comic archive ever made.</p>
+      </div>
+      <div class="card">
+        <h3>Built for a tablet</h3>
+        <p>Swipe to turn, pinch to zoom, double tap to zoom to a spot. Equally at home with a keyboard and a mouse.</p>
+      </div>
+      <div class="card">
+        <h3>It remembers where you stopped</h3>
+        <p>Each book reopens on the page you left it. Nothing is written next to your files — bookmarks live in your config directory.</p>
+      </div>
+      <div class="card">
+        <h3>Reads almost anything</h3>
+        <p>zip, cbz, rar, cbr, 7z, cb7, tar, cbt. PNG, JPEG, WebP, GIF, TIFF, BMP, SVG, plus AVIF, HEIF, JPEG-XL, PSD, OpenEXR, QOI, DDS, XCF and camera RAW.</p>
+      </div>
+      <div class="card">
+        <h3>Manga order</h3>
+        <p>Press <kbd>D</kbd> to flip the reading direction right to left; the pager, the swipes and the progress bar all follow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="controls">
+  <div class="wrap">
+    <h2>Controls</h2>
+    <p class="lede">The same bindings on both systems.</p>
+    <div class="controls">
+      <div>
+        <table>
+          <thead><tr><th colspan="2">Touch</th></tr></thead>
+          <tbody>
+            <tr><td>swipe</td><td>turn the page</td></tr>
+            <tr><td>tap the left or right edge</td><td>previous / next page</td></tr>
+            <tr><td>tap the middle</td><td>show or hide the bars</td></tr>
+            <tr><td>pinch</td><td>zoom</td></tr>
+            <tr><td>drag while zoomed</td><td>pan around the page</td></tr>
+            <tr><td>double tap</td><td>zoom to that spot, and back</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th colspan="2">Keyboard</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next page</td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>zoom in / out</td></tr>
+            <tr><td><kbd>Space</kbd> <kbd>Backspace</kbd></td><td>next / previous page</td></tr>
+            <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>first / last page</td></tr>
+            <tr><td><kbd>0</kbd></td><td>reset zoom</td></tr>
+            <tr><td><kbd>F</kbd></td><td>cycle fit: page, width, height, actual size</td></tr>
+            <tr><td><kbd>D</kbd></td><td>flip reading order, for manga</td></tr>
+            <tr><td><kbd>G</kbd></td><td>all pages</td></tr>
+            <tr><td><kbd>O</kbd></td><td>open something else</td></tr>
+            <tr><td><kbd>F11</kbd></td><td>fullscreen</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>close what is open, then back to the start screen</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install-detail">
+  <div class="wrap">
+    <h2>About the installers</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Linux</h3>
+        <p>Handles Arch (and CachyOS, EndeavourOS, Manjaro), Debian and Ubuntu, Fedora and openSUSE. Put <code>PREFIX=~/.local</code> in front to install just for yourself, with no root at all.</p>
+      </div>
+      <div class="card">
+        <h3>Windows</h3>
+        <p>No administrator rights needed. Everything lands under <code>%LOCALAPPDATA%\Programs\r9view</code>, with a Start Menu entry and an <em>Add or remove programs</em> entry. Pass <code>-Uninstall</code> to remove it.</p>
+      </div>
+      <div class="card">
+        <h3>It builds from source</h3>
+        <p>Both scripts fetch a toolchain, compile, and install. On Windows that toolchain is MSYS2 — but the finished application does not depend on it, because every library it needs is copied in beside the executable.</p>
+      </div>
+      <div class="card">
+        <h3>File associations</h3>
+        <p>r9view claims <code>.cbz</code> <code>.cbr</code> <code>.cb7</code> <code>.cbt</code> when nothing else has them, and adds itself to <em>Open with</em> for everything else it reads. It will not take <code>.zip</code> or <code>.jpg</code> away from whatever you already use.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Built by Rhineul Islam. Licensed under the GPL-3.0-or-later.</p>
+    <p>Inspired by <a href="https://github.com/easymodo/qimgv">qimgv</a>, rewritten around touch input and a modern Qt Quick interface.</p>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var COMMANDS = {
+      linux: {
+        text: 'curl -fsSL https://raw.githubusercontent.com/XPro-Gamer-Rhine/r9view/main/install.sh | bash',
+        note: 'Installs the build dependencies, compiles, and puts <code>r9view</code> on your PATH with a desktop entry.'
+      },
+      windows: {
+        text: 'irm https://raw.githubusercontent.com/XPro-Gamer-Rhine/r9view/main/install.ps1 | iex',
+        note: 'Run it in PowerShell. Installs to <code>%LOCALAPPDATA%</code>, so it never asks for administrator rights.'
+      }
+    };
+
+    var cmd = document.getElementById('cmd');
+    var cmdText = document.getElementById('cmd-text');
+    var note = document.getElementById('note');
+    var copy = document.getElementById('copy');
+    var tabs = {
+      linux: document.getElementById('tab-linux'),
+      windows: document.getElementById('tab-windows')
+    };
+
+    function select(os) {
+      cmd.dataset.os = os;
+      cmdText.textContent = COMMANDS[os].text;
+      note.innerHTML = COMMANDS[os].note;
+      for (var key in tabs) {
+        tabs[key].setAttribute('aria-selected', String(key === os));
+      }
+      copy.classList.remove('done');
+      copy.textContent = 'Copy';
+    }
+
+    Object.keys(tabs).forEach(function (os) {
+      tabs[os].addEventListener('click', function () { select(os); });
+    });
+
+    // Show the visitor the line that applies to the machine they are on. Anything
+    // that is not Windows gets the Linux one, which is the only other target.
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent;
+    select(/win/i.test(platform) ? 'windows' : 'linux');
+
+    copy.addEventListener('click', function () {
+      var text = cmdText.textContent;
+      var done = function () {
+        copy.textContent = 'Copied';
+        copy.classList.add('done');
+        setTimeout(function () {
+          copy.textContent = 'Copy';
+          copy.classList.remove('done');
+        }, 1800);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else {
+        fallback();
+      }
+      function fallback() {
+        // Older browsers, and any page not served over https.
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand('copy'); done(); } catch (e) { /* nothing else to try */ }
+        document.body.removeChild(area);
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

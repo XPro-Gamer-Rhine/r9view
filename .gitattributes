@@ -1,0 +1,10 @@
+# Line endings, decided here rather than per-machine. install.sh is fetched with
+# curl and piped straight into bash, where a single stray carriage return is a
+# syntax error -- so it is LF wherever it is checked out, on Windows included.
+* text=auto eol=lf
+
+*.sh  text eol=lf
+*.ps1 text eol=lf
+
+*.png binary
+*.ico binary

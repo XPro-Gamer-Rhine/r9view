@@ -2,6 +2,8 @@
 
 A touch-first image and comic viewer for Linux and Windows.
 
+**[xpro-gamer-rhine.github.io/r9view](https://xpro-gamer-rhine.github.io/r9view/)** — screenshots, and the install line for whichever system you are on.
+
 Point it at a `.cbz`, `.zip`, `.cbr` or `.7z` and it reads the images inside, in
 page order, without unpacking anything first — which is the whole reason it
 exists. It works just as well on an ordinary folder of pictures.

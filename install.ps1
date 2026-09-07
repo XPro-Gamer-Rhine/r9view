@@ -478,7 +478,12 @@ try {
         $workdir = Join-Path $env:TEMP ('r9view-src-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $workdir -Force | Out-Null
         Write-Step 'fetching r9view'
-        git clone --depth 1 --branch $Branch $RepoUrl (Join-Path $workdir 'r9view') 2>&1 | Out-Null
+        # --quiet, and no 2>&1: git reports "Cloning into ..." on stderr even
+        # when it succeeds, and merging a native command's stderr into the
+        # pipeline turns it into a terminating error while ErrorActionPreference
+        # is Stop. The exit code is the only honest signal. Left unredirected,
+        # a real failure still prints git's own reason before we stop.
+        git clone --quiet --depth 1 --branch $Branch $RepoUrl (Join-Path $workdir 'r9view')
         if ($LASTEXITCODE -ne 0) { Stop-Install "could not clone $RepoUrl" }
         $source = Join-Path $workdir 'r9view'
     } else {
